@@ -15,6 +15,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "@directus/sdk": "^22.0.0",
     "@tailwindcss/vite": "^4.3.0",
     "pinia": "^3.0.4",
     "tailwindcss": "^4.3.0",
