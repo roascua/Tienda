@@ -1,0 +1,361 @@
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import Navbar from '@/component/navbar.vue'
+import { useProductsStore } from '@/stores/products'
+
+interface Product {
+  id: number
+  name: string
+  brand: string
+  category: string
+  price: number
+  image: string | null
+  isNew: boolean
+  discount: number | null
+}
+
+const mockProducts: Product[] = [
+  { id: 1,  name: 'Baby Doll Encaje',          brand: 'Saphirus', category: 'Ropa Interior', price: 18900,  image: 'https://picsum.photos/seed/babydoll/600/800', isNew: true,  discount: null },
+  { id: 2,  name: 'Pijama Satín',              brand: 'Saphirus', category: 'Pijamas',      price: 25900,  image: 'https://picsum.photos/seed/pijamasatin/600/800', isNew: false, discount: null },
+  { id: 3,  name: 'Conjunto Encaje Negro',     brand: 'Tienda',    category: 'Ropa Interior', price: 21500,  image: 'https://picsum.photos/seed/encajenegro/600/800', isNew: false, discount: 15 },
+  { id: 4,  name: 'Pantuflas Soft',            brand: 'Saphirus', category: 'Pantuflas',    price: 12900,  image: 'https://picsum.photos/seed/pantuflassoft/600/800', isNew: false, discount: null },
+  { id: 5,  name: 'Camisón Tul',               brand: 'Tienda',    category: 'Pijamas',      price: 29900,  image: 'https://picsum.photos/seed/camison/600/800', isNew: true,  discount: null },
+  { id: 6,  name: 'Bralette Algodón',          brand: 'Tienda',    category: 'Ropa Interior', price: 14900,  image: 'https://picsum.photos/seed/bralette/600/800', isNew: false, discount: null },
+  { id: 7,  name: 'Pijama Corto',              brand: 'Tienda',    category: 'Pijamas',      price: 19900,  image: 'https://picsum.photos/seed/pijamacorto/600/800', isNew: false, discount: null },
+  { id: 8,  name: 'Pantys Encaje',             brand: 'Saphirus', category: 'Ropa Interior', price: 8900,   image: 'https://picsum.photos/seed/pantys/600/800', isNew: false, discount: null },
+  { id: 9,  name: 'Bata Satín',                brand: 'Tienda',    category: 'Pijamas',      price: 34900,  image: 'https://picsum.photos/seed/batasatin/600/800', isNew: false, discount: 10 },
+  { id: 10, name: 'Zapatillas Peluche',         brand: 'Tienda',    category: 'Pantuflas',    price: 15900,  image: 'https://picsum.photos/seed/zapatillas/600/800', isNew: false, discount: null },
+  { id: 11, name: 'Conjunto Satén',             brand: 'Saphirus', category: 'Ropa Interior', price: 23900,  image: 'https://picsum.photos/seed/saten/600/800', isNew: true,  discount: null },
+  { id: 12, name: 'Pantuflas Bambi',            brand: 'Tienda',    category: 'Pantuflas',    price: 13900,  image: 'https://picsum.photos/seed/bambi/600/800', isNew: false, discount: null },
+]
+
+const productStore = useProductsStore()
+const products = ref<Product[]>(mockProducts)
+const loadingCatalog = ref(true)
+
+onMounted(async () => {
+  try {
+    await productStore.loadPublished()
+    if (productStore.products.length > 0) {
+      products.value = productStore.products.map(p => ({
+        id: p.id,
+        name: p.name,
+        brand: p.brand,
+        category: p.category,
+        price: p.price,
+        image: p.image || 'https://picsum.photos/seed/placeholder/600/800',
+        isNew: p.isNew,
+        discount: p.discount,
+      }))
+    }
+  } catch {
+    // fallback to mock
+  }
+  loadingCatalog.value = false
+})
+
+type FilterEntry = { brand: string; category: string }
+
+const brandCategories = computed(() => {
+  const map: Record<string, string[]> = {}
+  for (const p of products.value) {
+    if (!map[p.brand]) map[p.brand] = []
+    const arr = map[p.brand]!
+    if (!arr.includes(p.category)) arr.push(p.category)
+  }
+  return map
+})
+
+const searchQuery = ref('')
+const sortBy = ref('')
+const showFilters = ref(false)
+const expandedBrands = ref<string[]>([])
+const selectedFilters = ref<FilterEntry[]>([])
+const filterRef = ref<HTMLElement | null>(null)
+
+const activeFiltersCount = computed(() => selectedFilters.value.length)
+
+function toggleBrandExpand(brand: string) {
+  const i = expandedBrands.value.indexOf(brand)
+  i === -1 ? expandedBrands.value.push(brand) : expandedBrands.value.splice(i, 1)
+}
+
+function toggleFilter(brand: string, category: string) {
+  const idx = selectedFilters.value.findIndex(f => f.brand === brand && f.category === category)
+  idx === -1 ? selectedFilters.value.push({ brand, category }) : selectedFilters.value.splice(idx, 1)
+}
+
+function isSelected(brand: string, category: string) {
+  return selectedFilters.value.some(f => f.brand === brand && f.category === category)
+}
+
+function clearFilters() {
+  selectedFilters.value = []
+}
+
+function removeFilter(brand: string, category: string) {
+  const idx = selectedFilters.value.findIndex(f => f.brand === brand && f.category === category)
+  if (idx !== -1) selectedFilters.value.splice(idx, 1)
+}
+
+function countBy(brand: string, category: string) {
+  return products.value.filter(p => p.brand === brand && p.category === category).length
+}
+
+function dynamicCount(brand: string, category: string) {
+  return products.value.filter(p => {
+    if (searchQuery.value && !p.name.toLowerCase().includes(searchQuery.value.toLowerCase())) return false
+    if (selectedFilters.value.length === 0) return p.brand === brand && p.category === category
+    const alreadyFilters = selectedFilters.value.filter(f => !(f.brand === brand && f.category === category))
+    if (alreadyFilters.length === 0) return p.brand === brand && p.category === category
+    return alreadyFilters.some(f => f.brand === p.brand && f.category === p.category) && p.brand === brand && p.category === category
+  }).length
+}
+
+const filteredProducts = computed(() => {
+  let result = products.value.filter(p => {
+    if (searchQuery.value && !p.name.toLowerCase().includes(searchQuery.value.toLowerCase())) return false
+    if (selectedFilters.value.length === 0) return true
+    return selectedFilters.value.some(f => f.brand === p.brand && f.category === p.category)
+  })
+
+  if (sortBy.value === 'price-asc') result.sort((a, b) => a.price - b.price)
+  else if (sortBy.value === 'price-desc') result.sort((a, b) => b.price - a.price)
+  else if (sortBy.value === 'name') result.sort((a, b) => a.name.localeCompare(b.name))
+
+  return result
+})
+
+function onClickOutside(e: MouseEvent) {
+  if (filterRef.value && !filterRef.value.contains(e.target as Node)) {
+    showFilters.value = false
+  }
+}
+
+onMounted(() => document.addEventListener('mousedown', onClickOutside))
+onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
+
+function formatPrice(n: number) {
+  return '$ ' + n.toLocaleString('es-AR')
+}
+</script>
+
+<template>
+  <div class="min-h-screen bg-[#fff8f9]">
+    <Navbar />
+
+    <div class="pt-20 pb-16 px-6">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+          <div>
+            <h1 class="text-4xl md:text-5xl font-bold text-[#1f151b] tracking-tight">Catálogo</h1>
+            <p class="text-gray-400 mt-1 text-sm">
+              {{ filteredProducts.length }} producto{{ filteredProducts.length !== 1 ? 's' : '' }}
+              <span v-if="activeFiltersCount > 0" class="text-rose-400"> · {{ activeFiltersCount }} filtro{{ activeFiltersCount !== 1 ? 's' : '' }}</span>
+            </p>
+            <div v-if="activeFiltersCount > 0" class="flex flex-wrap gap-1.5 mt-3">
+              <span
+                v-for="f in selectedFilters"
+                :key="f.brand + f.category"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-rose-100/70 text-rose-700"
+              >
+                {{ f.brand }}: {{ f.category }}
+                <button class="hover:text-rose-900 transition-colors" @click="removeFilter(f.brand, f.category)">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </span>
+            </div>
+          </div>
+
+          <div ref="filterRef" class="relative flex flex-wrap items-center gap-2">
+            <button
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-rose-200/40 bg-white/60 text-[#3B2A35] hover:border-rose-300 transition-all"
+              :class="{ 'border-rose-300 bg-rose-50/50': showFilters }"
+              @click="showFilters = !showFilters"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filtros
+              <span v-if="activeFiltersCount > 0" class="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center font-bold">{{ activeFiltersCount }}</span>
+            </button>
+
+            <Transition name="filter-panel">
+              <div v-if="showFilters" class="absolute top-full left-0 mt-2 w-72 z-30 bg-white/90 backdrop-blur-xl border border-rose-200/40 rounded-2xl shadow-xl p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <span class="text-xs font-semibold text-[#3B2A35] uppercase tracking-wider">Marca</span>
+                  <button v-if="activeFiltersCount > 0" class="text-[10px] text-rose-600 hover:text-rose-700 underline underline-offset-2" @click="clearFilters()">Limpiar</button>
+                </div>
+                <div v-for="(cats, brand) in brandCategories" :key="brand" class="mb-1.5 last:mb-0">
+                  <button
+                    class="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-medium text-[#3B2A35] hover:bg-rose-50/60 transition-colors text-left"
+                    @click="toggleBrandExpand(brand)"
+                  >
+                    <svg
+                      class="w-3.5 h-3.5 text-gray-400 transition-transform duration-200"
+                      :class="expandedBrands.includes(brand) ? 'rotate-90' : ''"
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    {{ brand }}
+                  </button>
+                  <div
+                    class="accordion-body ml-6 mt-1"
+                    :class="expandedBrands.includes(brand) ? 'open' : ''"
+                  >
+                    <div class="space-y-0.5">
+                      <button
+                        v-for="cat in cats"
+                        :key="cat"
+                        class="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-sm transition-colors text-left"
+                        :class="isSelected(brand, cat) ? 'text-rose-700 font-medium' : 'text-gray-600 hover:text-gray-800 hover:bg-rose-50/40'"
+                        @click="toggleFilter(brand, cat)"
+                      >
+                        <span
+                          class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                          :class="isSelected(brand, cat) ? 'border-rose-500 bg-rose-500' : 'border-gray-300'"
+                        >
+                          <svg v-if="isSelected(brand, cat)" class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
+                        <span class="flex-1">{{ cat }}</span>
+                        <span class="text-[10px] text-gray-400">{{ dynamicCount(brand, cat) }}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+
+            <div class="relative ml-auto">
+              <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="Buscar..."
+                class="w-32 lg:w-40 pl-8 pr-2.5 py-1.5 text-xs bg-white/70 border border-rose-200/40 rounded-full outline-none focus:border-rose-300 transition-colors text-[#1f151b] placeholder:text-gray-400"
+              />
+            </div>
+
+            <select
+              v-model="sortBy"
+              class="text-xs bg-white/70 border border-rose-200/40 rounded-full px-3 py-1.5 outline-none focus:border-rose-300 transition-colors text-[#1f151b]"
+            >
+              <option value="">Ordenar</option>
+              <option value="price-asc">Menor precio</option>
+              <option value="price-desc">Mayor precio</option>
+              <option value="name">A-Z</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div
+            v-for="(product, index) in filteredProducts"
+            :key="product.id"
+            class="product-card group relative bg-white/70 backdrop-blur-sm border border-rose-200/30 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-500"
+          >
+            <div class="aspect-[3/4] overflow-hidden relative">
+              <img
+                :src="product.image || ''"
+                :alt="product.name"
+                class="w-full h-full object-cover transition-all duration-700 group-hover:scale-105"
+              />
+
+              <div v-if="product.isNew" class="absolute top-3 left-3 z-10">
+                <span class="px-3 py-1 rounded-full text-xs font-semibold bg-white/80 backdrop-blur-sm text-[#1f151b] border border-white/60">Nuevo</span>
+              </div>
+              <div v-if="product.discount" class="absolute top-3 right-3 z-10">
+                <span class="px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/90 text-white">-{{ product.discount }}%</span>
+              </div>
+
+              <button class="absolute z-10 w-9 h-9 rounded-full bg-white/70 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-white hover:scale-110 shadow-sm" :class="{ '!opacity-100': product.discount }" :style="{ top: product.discount ? '3.5rem' : '0.75rem', right: '0.75rem' }">
+                <svg class="w-4 h-4 text-[#3B2A35]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </button>
+
+              <div class="absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+                <div class="flex gap-1.5 justify-center">
+                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">XS</button>
+                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">S</button>
+                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">M</button>
+                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">L</button>
+                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">XL</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-4">
+              <p class="text-xs text-rose-400/80 uppercase tracking-wider mb-1">{{ product.brand }}</p>
+              <h3 class="text-base font-semibold text-[#1f151b] mb-1.5">{{ product.name }}</h3>
+              <div class="flex items-baseline gap-2">
+                <p v-if="product.discount" class="text-base font-bold text-rose-600">{{ formatPrice(product.price - (product.price * product.discount) / 100) }}</p>
+                <p class="text-lg font-bold" :class="product.discount ? 'text-gray-400 line-through text-sm' : 'text-[#3B2A35]'">{{ formatPrice(product.price) }}</p>
+              </div>
+              <p class="text-xs text-gray-400 mt-1">3 cuotas sin interés de {{ formatPrice(Math.round(product.discount ? (product.price - (product.price * product.discount) / 100) / 3 : product.price / 3)) }}</p>
+            </div>
+          </div>
+        </div>
+
+        <p v-if="filteredProducts.length === 0" class="text-center text-gray-400 mt-20 text-lg">
+          No hay productos con esos filtros.
+        </p>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.product-card {
+  opacity: 0;
+  animation: cardFadeIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.product-card:nth-child(1) { animation-delay: 0.02s; }
+.product-card:nth-child(2) { animation-delay: 0.06s; }
+.product-card:nth-child(3) { animation-delay: 0.10s; }
+.product-card:nth-child(4) { animation-delay: 0.14s; }
+.product-card:nth-child(5) { animation-delay: 0.18s; }
+.product-card:nth-child(6) { animation-delay: 0.22s; }
+.product-card:nth-child(7) { animation-delay: 0.26s; }
+.product-card:nth-child(8) { animation-delay: 0.30s; }
+.product-card:nth-child(9) { animation-delay: 0.34s; }
+.product-card:nth-child(10) { animation-delay: 0.38s; }
+.product-card:nth-child(11) { animation-delay: 0.42s; }
+.product-card:nth-child(12) { animation-delay: 0.46s; }
+
+@keyframes cardFadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.accordion-body {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.35s ease, opacity 0.3s ease, margin 0.3s ease;
+}
+.accordion-body.open {
+  max-height: 300px;
+  opacity: 1;
+}
+
+.filter-panel-enter-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.filter-panel-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.filter-panel-enter-from,
+.filter-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.96);
+}
+</style>
