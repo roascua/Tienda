@@ -1,0 +1,16 @@
+{
+  "name": "Saphirus Tienda",
+  "short_name": "Saphirus",
+  "description": "Tienda exclusiva de ropa interior, pijamas y pantuflas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff8f9",
+  "theme_color": "#fff8f9",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

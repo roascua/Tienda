@@ -1,13 +1,30 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '@/pages/home.vue'
-import CatalogoView from '@/pages/catalogo.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition
+    return { top: 0 }
+  },
   routes: [
-    { path: '/', name: 'home', component: HomeView },
-    { path: '/catalogo', name: 'catalogo', component: CatalogoView },
+    { path: '/', name: 'home', component: () => import('@/pages/home.vue') },
+    { path: '/catalogo', name: 'catalogo', component: () => import('@/pages/catalogo.vue') },
+    {
+      path: '/producto/:id',
+      name: 'producto',
+      component: () => import('@/pages/ProductoDetail.vue'),
+    },
+    {
+      path: '/about',
+      name: 'about',
+      component: () => import('@/pages/about.vue'),
+    },
+    {
+      path: '/contacto',
+      name: 'contacto',
+      component: () => import('@/pages/contacto.vue'),
+    },
     {
       path: '/admin',
       redirect: '/admin/productos',
@@ -23,6 +40,11 @@ const router = createRouter({
       path: '/admin/login',
       name: 'admin-login',
       component: () => import('@/pages/admin/LoginView.vue'),
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/pages/NotFound.vue'),
     },
   ],
 })

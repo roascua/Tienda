@@ -1,7 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useHead } from '@unhead/vue'
 import Navbar from '@/component/navbar.vue'
 import { useProductsStore } from '@/stores/products'
+import { useCartStore } from '@/stores/cart'
+import { useToast } from 'primevue/usetoast'
+
+const route = useRoute()
+const router = useRouter()
+const productStore = useProductsStore()
+const cartStore = useCartStore()
+const toast = useToast()
 
 interface Product {
   id: number
@@ -13,6 +23,9 @@ interface Product {
   isNew: boolean
   discount: number | null
 }
+
+const FALLBACK_IMAGE = 'https://picsum.photos/seed/placeholder/600/800'
+const SIZES = ['XS', 'S', 'M', 'L', 'XL'] as const
 
 const mockProducts: Product[] = [
   { id: 1,  name: 'Baby Doll Encaje',          brand: 'Saphirus', category: 'Ropa Interior', price: 18900,  image: 'https://picsum.photos/seed/babydoll/600/800', isNew: true,  discount: null },
@@ -29,7 +42,6 @@ const mockProducts: Product[] = [
   { id: 12, name: 'Pantuflas Bambi',            brand: 'Tienda',    category: 'Pantuflas',    price: 13900,  image: 'https://picsum.photos/seed/bambi/600/800', isNew: false, discount: null },
 ]
 
-const productStore = useProductsStore()
 const products = ref<Product[]>(mockProducts)
 const loadingCatalog = ref(true)
 
@@ -43,13 +55,13 @@ onMounted(async () => {
         brand: p.brand,
         category: p.category,
         price: p.price,
-        image: p.image || 'https://picsum.photos/seed/placeholder/600/800',
+        image: p.image || FALLBACK_IMAGE,
         isNew: p.isNew,
         discount: p.discount,
       }))
     }
   } catch {
-    // fallback to mock
+    // fallback a mock
   }
   loadingCatalog.value = false
 })
@@ -72,8 +84,50 @@ const showFilters = ref(false)
 const expandedBrands = ref<string[]>([])
 const selectedFilters = ref<FilterEntry[]>([])
 const filterRef = ref<HTMLElement | null>(null)
+const activeSizeSelector = ref<number | null>(null)
 
 const activeFiltersCount = computed(() => selectedFilters.value.length)
+
+// --- Sincronización con la URL (búsqueda + filtros), con debounce ---
+
+function encodeFilters(filters: FilterEntry[]) {
+  return filters.map(f => `${f.brand}|${f.category}`).join(',')
+}
+
+function decodeFilters(raw: string): FilterEntry[] {
+  return raw
+    .split(',')
+    .filter(Boolean)
+    .map(pair => {
+      const [brand, category] = pair.split('|')
+      return { brand, category }
+    })
+    .filter(f => f.brand && f.category)
+}
+
+let syncTimer: ReturnType<typeof setTimeout> | undefined
+
+function syncQueryToUrl() {
+  if (syncTimer) clearTimeout(syncTimer)
+  syncTimer = setTimeout(() => {
+    router.replace({
+      query: {
+        q: searchQuery.value || undefined,
+        filtros: selectedFilters.value.length ? encodeFilters(selectedFilters.value) : undefined,
+      },
+    })
+  }, 250)
+}
+
+watch(searchQuery, syncQueryToUrl)
+watch(selectedFilters, syncQueryToUrl, { deep: true })
+
+onMounted(() => {
+  if (route.query.q) searchQuery.value = route.query.q as string
+  if (route.query.filtros) selectedFilters.value = decodeFilters(route.query.filtros as string)
+})
+
+// --- Filtros ---
 
 function toggleBrandExpand(brand: string) {
   const i = expandedBrands.value.indexOf(brand)
@@ -98,17 +152,14 @@ function removeFilter(brand: string, category: string) {
   if (idx !== -1) selectedFilters.value.splice(idx, 1)
 }
 
-function countBy(brand: string, category: string) {
-  return products.value.filter(p => p.brand === brand && p.category === category).length
-}
-
+// Cuántos productos hay para esa combinación marca+categoría, respetando la búsqueda activa.
+// (Los filtros son OR entre sí, así que no tiene sentido cruzarlos acá: un producto que
+// cumple esta combinación ya cuenta sin importar qué otra cosa esté tildada.)
 function dynamicCount(brand: string, category: string) {
   return products.value.filter(p => {
+    if (p.brand !== brand || p.category !== category) return false
     if (searchQuery.value && !p.name.toLowerCase().includes(searchQuery.value.toLowerCase())) return false
-    if (selectedFilters.value.length === 0) return p.brand === brand && p.category === category
-    const alreadyFilters = selectedFilters.value.filter(f => !(f.brand === brand && f.category === category))
-    if (alreadyFilters.length === 0) return p.brand === brand && p.category === category
-    return alreadyFilters.some(f => f.brand === p.brand && f.category === p.category) && p.brand === brand && p.category === category
+    return true
   }).length
 }
 
@@ -126,9 +177,20 @@ const filteredProducts = computed(() => {
   return result
 })
 
+function clearAll() {
+  clearFilters()
+  searchQuery.value = ''
+}
+
+// --- Cerrar paneles flotantes al clickear afuera ---
+
 function onClickOutside(e: MouseEvent) {
-  if (filterRef.value && !filterRef.value.contains(e.target as Node)) {
+  const target = e.target as HTMLElement
+  if (filterRef.value && !filterRef.value.contains(target)) {
     showFilters.value = false
+  }
+  if (!target.closest('[data-size-popover]')) {
+    activeSizeSelector.value = null
   }
 }
 
@@ -136,8 +198,53 @@ onMounted(() => document.addEventListener('mousedown', onClickOutside))
 onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
 
 function formatPrice(n: number) {
-  return '$ ' + n.toLocaleString('es-AR')
+  return '$ ' + Math.round(n).toLocaleString('es-AR')
 }
+
+function goToProduct(id: number) {
+  router.push(`/producto/${id}`)
+}
+
+function onImageError(e: Event) {
+  const img = e.target as HTMLImageElement
+  if (img.src !== FALLBACK_IMAGE) img.src = FALLBACK_IMAGE
+}
+
+// --- Carrito ---
+
+function toggleSizeSelector(e: Event, productId: number) {
+  e.stopPropagation()
+  activeSizeSelector.value = activeSizeSelector.value === productId ? null : productId
+}
+
+function selectSize(e: Event, product: Product, size: string) {
+  e.stopPropagation()
+  addToCart(product, size)
+  activeSizeSelector.value = null
+}
+
+function addToCart(product: Product, size: string) {
+  cartStore.addToCart({
+    id: product.id,
+    name: product.name,
+    price: product.discount ? product.price - (product.price * product.discount) / 100 : product.price,
+    image: product.image || FALLBACK_IMAGE,
+    size,
+  })
+  toast.add({
+    severity: 'success',
+    summary: 'Agregado',
+    detail: `${product.name} · Talle ${size}`,
+    life: 2000,
+  })
+}
+
+useHead({
+  title: 'Catálogo - Saphirus Tienda',
+  meta: [
+    { name: 'description', content: 'Explorá nuestro catálogo de ropa interior, pijamas y pantuflas.' },
+  ],
+})
 </script>
 
 <template>
@@ -150,8 +257,13 @@ function formatPrice(n: number) {
           <div>
             <h1 class="text-4xl md:text-5xl font-bold text-[#1f151b] tracking-tight">Catálogo</h1>
             <p class="text-gray-400 mt-1 text-sm">
-              {{ filteredProducts.length }} producto{{ filteredProducts.length !== 1 ? 's' : '' }}
-              <span v-if="activeFiltersCount > 0" class="text-rose-400"> · {{ activeFiltersCount }} filtro{{ activeFiltersCount !== 1 ? 's' : '' }}</span>
+              <template v-if="loadingCatalog">
+                Cargando...
+              </template>
+              <template v-else>
+                {{ filteredProducts.length }} producto{{ filteredProducts.length !== 1 ? 's' : '' }}
+                <span v-if="activeFiltersCount > 0" class="text-rose-400"> · {{ activeFiltersCount }} filtro{{ activeFiltersCount !== 1 ? 's' : '' }}</span>
+              </template>
             </p>
             <div v-if="activeFiltersCount > 0" class="flex flex-wrap gap-1.5 mt-3">
               <span
@@ -171,7 +283,7 @@ function formatPrice(n: number) {
 
           <div ref="filterRef" class="relative flex flex-wrap items-center gap-2">
             <button
-              class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-rose-200/40 bg-white/60 text-[#3B2A35] hover:border-rose-300 transition-all"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-rose-200/40 bg-white/60 text-[#3b2a35] hover:border-rose-300 transition-all"
               :class="{ 'border-rose-300 bg-rose-50/50': showFilters }"
               @click="showFilters = !showFilters"
             >
@@ -183,14 +295,14 @@ function formatPrice(n: number) {
             </button>
 
             <Transition name="filter-panel">
-              <div v-if="showFilters" class="absolute top-full left-0 mt-2 w-72 z-30 bg-white/90 backdrop-blur-xl border border-rose-200/40 rounded-2xl shadow-xl p-4">
+              <div v-if="showFilters" class="absolute top-full left-0 mt-2 w-72 z-30 bg-white/90 dark:bg-[#2a1a20]/90 backdrop-blur-xl border border-rose-200/40 dark:border-rose-800/30 rounded-2xl shadow-xl p-4">
                 <div class="flex items-center justify-between mb-3">
-                  <span class="text-xs font-semibold text-[#3B2A35] uppercase tracking-wider">Marca</span>
+                  <span class="text-xs font-semibold text-[#3b2a35] uppercase tracking-wider">Marca</span>
                   <button v-if="activeFiltersCount > 0" class="text-[10px] text-rose-600 hover:text-rose-700 underline underline-offset-2" @click="clearFilters()">Limpiar</button>
                 </div>
                 <div v-for="(cats, brand) in brandCategories" :key="brand" class="mb-1.5 last:mb-0">
                   <button
-                    class="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-medium text-[#3B2A35] hover:bg-rose-50/60 transition-colors text-left"
+                    class="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-medium text-[#1f151b] hover:bg-rose-50/60 dark:hover:bg-rose-900/20 transition-colors text-left"
                     @click="toggleBrandExpand(brand)"
                   >
                     <svg
@@ -211,7 +323,7 @@ function formatPrice(n: number) {
                         v-for="cat in cats"
                         :key="cat"
                         class="flex items-center gap-2 w-full px-3 py-1.5 rounded-lg text-sm transition-colors text-left"
-                        :class="isSelected(brand, cat) ? 'text-rose-700 font-medium' : 'text-gray-600 hover:text-gray-800 hover:bg-rose-50/40'"
+                        :class="isSelected(brand, cat) ? 'text-rose-700 font-medium' : 'text-gray-600 hover:text-gray-800 hover:bg-rose-50/40 dark:hover:bg-rose-900/20'"
                         @click="toggleFilter(brand, cat)"
                       >
                         <span
@@ -239,13 +351,13 @@ function formatPrice(n: number) {
                 v-model="searchQuery"
                 type="text"
                 placeholder="Buscar..."
-                class="w-32 lg:w-40 pl-8 pr-2.5 py-1.5 text-xs bg-white/70 border border-rose-200/40 rounded-full outline-none focus:border-rose-300 transition-colors text-[#1f151b] placeholder:text-gray-400"
+                class="w-32 lg:w-40 pl-8 pr-2.5 py-1.5 text-xs bg-white/70 dark:bg-[#2a1a20]/70 border border-rose-200/40 dark:border-rose-800/30 rounded-full outline-none focus:border-rose-300 transition-colors text-[#1f151b] placeholder:text-gray-400"
               />
             </div>
 
             <select
               v-model="sortBy"
-              class="text-xs bg-white/70 border border-rose-200/40 rounded-full px-3 py-1.5 outline-none focus:border-rose-300 transition-colors text-[#1f151b]"
+              class="text-xs bg-white/70 dark:bg-[#2a1a20]/70 border border-rose-200/40 dark:border-rose-800/30 rounded-full px-3 py-1.5 outline-none focus:border-rose-300 transition-colors text-[#1f151b]"
             >
               <option value="">Ordenar</option>
               <option value="price-asc">Menor precio</option>
@@ -255,17 +367,32 @@ function formatPrice(n: number) {
           </div>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <!-- Loading skeletons -->
+        <div v-if="loadingCatalog" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div v-for="i in 6" :key="i" class="bg-white/50 dark:bg-[#2a1a20]/50 border border-rose-200/30 dark:border-rose-800/20 rounded-2xl overflow-hidden">
+            <div class="aspect-[3/4] bg-rose-100/50 dark:bg-rose-900/20 skeleton-pulse" />
+            <div class="p-4 space-y-3">
+              <div class="h-3 w-1/3 bg-rose-100/50 dark:bg-rose-900/20 rounded skeleton-pulse" />
+              <div class="h-5 w-3/4 bg-rose-100/50 dark:bg-rose-900/20 rounded skeleton-pulse" />
+              <div class="h-5 w-1/3 bg-rose-100/50 dark:bg-rose-900/20 rounded skeleton-pulse" />
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div
             v-for="(product, index) in filteredProducts"
             :key="product.id"
-            class="product-card group relative bg-white/70 backdrop-blur-sm border border-rose-200/30 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-500"
+            class="product-card group relative bg-white/70 dark:bg-[#2a1a20]/50 backdrop-blur-sm border border-rose-200/30 dark:border-rose-800/20 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-rose-900/10 transition-all duration-500 cursor-pointer"
+            @click="goToProduct(product.id)"
           >
             <div class="aspect-[3/4] overflow-hidden relative">
               <img
-                :src="product.image || ''"
+                :src="product.image || FALLBACK_IMAGE"
                 :alt="product.name"
                 class="w-full h-full object-cover transition-all duration-700 group-hover:scale-105"
+                loading="lazy"
+                @error="onImageError"
               />
 
               <div v-if="product.isNew" class="absolute top-3 left-3 z-10">
@@ -275,20 +402,40 @@ function formatPrice(n: number) {
                 <span class="px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/90 text-white">-{{ product.discount }}%</span>
               </div>
 
-              <button class="absolute z-10 w-9 h-9 rounded-full bg-white/70 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-white hover:scale-110 shadow-sm" :class="{ '!opacity-100': product.discount }" :style="{ top: product.discount ? '3.5rem' : '0.75rem', right: '0.75rem' }">
-                <svg class="w-4 h-4 text-[#3B2A35]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
-              </button>
+              <!-- Botón de agregar al carrito: siempre visible (no depende de hover), funciona en mobile -->
+              <div
+                class="absolute z-20"
+                :style="{ top: product.discount ? '3.5rem' : '0.75rem', right: '0.75rem' }"
+                data-size-popover
+              >
+                <button
+                  class="w-9 h-9 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center transition-all duration-300 hover:bg-white hover:scale-110 shadow-sm"
+                  :aria-expanded="activeSizeSelector === product.id"
+                  aria-label="Elegir talle y agregar al carrito"
+                  @click="toggleSizeSelector($event, product.id)"
+                >
+                  <svg class="w-4 h-4 text-[#3B2A35]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
+                  </svg>
+                </button>
 
-              <div class="absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
-                <div class="flex gap-1.5 justify-center">
-                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">XS</button>
-                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">S</button>
-                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">M</button>
-                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">L</button>
-                  <button class="px-3 py-1.5 text-xs font-medium bg-white/90 backdrop-blur-sm rounded-full text-[#1f151b] hover:bg-white transition-colors shadow-sm">XL</button>
-                </div>
+                <Transition name="size-popover">
+                  <div
+                    v-if="activeSizeSelector === product.id"
+                    class="absolute right-0 mt-2 w-44 bg-white rounded-xl shadow-lg border border-rose-100 p-2 grid grid-cols-3 gap-1.5"
+                    data-size-popover
+                    @click.stop
+                  >
+                    <button
+                      v-for="size in SIZES"
+                      :key="size"
+                      class="py-1.5 text-xs font-medium rounded-lg text-[#1f151b] bg-rose-50 hover:bg-rose-500 hover:text-white transition-colors"
+                      @click="selectSize($event, product, size)"
+                    >
+                      {{ size }}
+                    </button>
+                  </div>
+                </Transition>
               </div>
             </div>
 
@@ -297,16 +444,23 @@ function formatPrice(n: number) {
               <h3 class="text-base font-semibold text-[#1f151b] mb-1.5">{{ product.name }}</h3>
               <div class="flex items-baseline gap-2">
                 <p v-if="product.discount" class="text-base font-bold text-rose-600">{{ formatPrice(product.price - (product.price * product.discount) / 100) }}</p>
-                <p class="text-lg font-bold" :class="product.discount ? 'text-gray-400 line-through text-sm' : 'text-[#3B2A35]'">{{ formatPrice(product.price) }}</p>
+                <p class="text-lg font-bold" :class="product.discount ? 'text-gray-400 line-through text-sm' : 'text-[#1f151b]'">{{ formatPrice(product.price) }}</p>
               </div>
-              <p class="text-xs text-gray-400 mt-1">3 cuotas sin interés de {{ formatPrice(Math.round(product.discount ? (product.price - (product.price * product.discount) / 100) / 3 : product.price / 3)) }}</p>
+              <p class="text-xs text-gray-400 mt-1">3 cuotas sin interés de {{ formatPrice(product.discount ? (product.price - (product.price * product.discount) / 100) / 3 : product.price / 3) }}</p>
             </div>
           </div>
         </div>
 
-        <p v-if="filteredProducts.length === 0" class="text-center text-gray-400 mt-20 text-lg">
-          No hay productos con esos filtros.
-        </p>
+        <div v-if="!loadingCatalog && filteredProducts.length === 0" class="text-center mt-20">
+          <p class="text-gray-400 text-lg mb-4">No hay productos con esos filtros.</p>
+          <button
+            v-if="activeFiltersCount > 0 || searchQuery"
+            class="px-5 py-2 rounded-full bg-rose-500 text-white text-sm font-medium hover:bg-rose-600 transition-colors"
+            @click="clearAll"
+          >
+            Limpiar filtros y búsqueda
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -357,5 +511,17 @@ function formatPrice(n: number) {
 .filter-panel-leave-to {
   opacity: 0;
   transform: translateY(-8px) scale(0.96);
+}
+
+.size-popover-enter-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.size-popover-leave-active {
+  transition: opacity 0.1s ease, transform 0.1s ease;
+}
+.size-popover-enter-from,
+.size-popover-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.95);
 }
 </style>
