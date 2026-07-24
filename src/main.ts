@@ -1,6 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { createUnhead } from 'unhead'
+import { createHead } from '@unhead/vue/client'
 import PrimeVue from 'primevue/config';
 import Aura from '@primeuix/themes/aura';
 import ToastService from 'primevue/toastservice';
@@ -10,30 +10,22 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 
-const app = createApp(App);
+const app = createApp(App)
 
-// Crear instancia de unhead
-const head = createUnhead()
-
-// Plugin personalizado para proporcionar head a todos los componentes
-const headPlugin = {
-  install(app: any) {
-    app.provide('usehead', head)
-  }
-}
+const head = createHead()
 
 app.use(PrimeVue, {
     theme: {
         preset: Aura
     },
     ripple: true
-});
+})
 
 app.use(ToastService)
 app.use(ConfirmationService)
 app.directive('ripple', Ripple)
 app.use(createPinia())
-app.use(headPlugin)
+app.use(head)
 app.use(router)
 
 app.mount('#app')

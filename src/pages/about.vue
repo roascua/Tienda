@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineOptions({ name: 'AboutPage' })
 import { useHead } from '@unhead/vue'
 import Navbar from '@/component/navbar.vue'
 

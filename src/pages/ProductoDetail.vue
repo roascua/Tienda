@@ -16,16 +16,10 @@ const toast = useToast()
 
 const loading = ref(true)
 const selectedSize = ref('M')
-const selectedImage = ref(0)
 
 const product = computed(() => productStore.current)
 
 const sizes = ['XS', 'S', 'M', 'L', 'XL']
-
-const images = computed(() => {
-  if (!product.value?.image) return []
-  return [product.value.image, product.value.image]
-})
 
 onMounted(async () => {
   const id = Number(route.params.id)

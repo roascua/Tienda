@@ -1,8 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const sectionRef = ref<HTMLElement | null>(null)
 const cards = ref<HTMLElement[]>([])
+
+function goToBrand(brand: string) {
+  router.push(`/catalogo?marca=${brand}`)
+}
+
+function goToCatalogo() {
+  router.push('/catalogo')
+}
 
 function handleMouseMove(e: MouseEvent) {
   cards.value.forEach((card) => {
@@ -63,19 +73,30 @@ onBeforeUnmount(() => {
     <div class="sparkle sparkle--7" aria-hidden="true" />
     <div class="sparkle sparkle--8" aria-hidden="true" />
 
-    <div class="relative z-10 w-full h-full flex flex-col items-center justify-center px-6 gap-10">
+    <div class="relative z-10 w-full h-full flex flex-col items-center justify-center px-6 gap-8">
+      <div class="hero-kicker">
+        <span class="hero-kicker-text">Nueva colección</span>
+      </div>
+
       <div class="flex flex-col md:flex-row gap-6 w-full max-w-3xl">
-        <div class="hero-card group w-full border border-white/40 rounded-2xl overflow-hidden flex items-center justify-center" style="min-height: 260px;">
+        <div class="hero-card group w-full border border-white/40 rounded-2xl overflow-hidden flex items-center justify-center" style="min-height: 260px;" @click="goToBrand('Tienda')">
           <span class="text-4xl font-bold tracking-[0.15em] text-center block w-full uppercase px-6 py-8" style="color: #1f151b">
             TIENDA
           </span>
         </div>
-        <div class="hero-card hero-card--two group w-full border border-white/40 rounded-2xl overflow-hidden flex items-center justify-center" style="min-height: 260px;">
+        <div class="hero-card hero-card--two group w-full border border-white/40 rounded-2xl overflow-hidden flex items-center justify-center" style="min-height: 260px;" @click="goToBrand('Saphirus')">
           <span class="text-4xl font-bold tracking-[0.15em] text-center block w-full uppercase px-6 py-8" style="color: #1f151b">
             SAPHIRUS
           </span>
         </div>
       </div>
+
+      <button class="hero-cta" @click="goToCatalogo">
+        Ver catálogo
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+        </svg>
+      </button>
     </div>
 
     <div class="absolute bottom-0 left-0 right-0 h-32 z-10 pointer-events-none bg-gradient-to-b from-transparent to-[#fff8f9]" />
@@ -250,6 +271,26 @@ onBeforeUnmount(() => {
   100% { transform: translate(-15px, 20px) scale(0.5); opacity: 0.1; }
 }
 
+.hero-kicker {
+  opacity: 0;
+  animation: kickerFade 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.15s;
+}
+
+.hero-kicker-text {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+  color: #3B2A35;
+  opacity: 0.75;
+}
+
+@keyframes kickerFade {
+  from { opacity: 0; translate: 0 10px; }
+  to   { opacity: 0.75; translate: 0 0; }
+}
+
 .hero-card {
   background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(14px);
@@ -278,6 +319,31 @@ onBeforeUnmount(() => {
   to   { opacity: 1; translate: 0 0; }
 }
 
+.hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.75rem;
+  border-radius: 999px;
+  background: #3B2A35;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  opacity: 0;
+  translate: 0 20px;
+  animation: heroRise 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.7s;
+  transition: background 0.25s ease, transform 0.2s ease, box-shadow 0.25s ease;
+}
+
+.hero-cta:hover {
+  background: #4a3a45;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(59, 42, 53, 0.25);
+}
+
 @keyframes bounce {
   0%, 100% { transform: translate(-50%, 0); }
   50% { transform: translate(-50%, -8px); }
@@ -295,7 +361,9 @@ onBeforeUnmount(() => {
   .animate-bounce {
     animation: none;
   }
-  .hero-card {
+  .hero-card,
+  .hero-cta,
+  .hero-kicker {
     animation: none;
     opacity: 1;
   }

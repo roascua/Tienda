@@ -1,3 +1,7 @@
+<script setup lang="ts">
+defineOptions({ name: 'AppFooter' })
+</script>
+
 <template>
   <footer class="relative bg-gradient-to-b from-[#fff8f9] to-[#fce8ec] py-16 px-6 overflow-hidden">
     <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-rose-300/40 to-transparent" />

@@ -24,8 +24,8 @@ export const useProductsStore = defineStore('products', () => {
     error.value = null
     try {
       products.value = await fetchAllProducts()
-    } catch (e: any) {
-      error.value = e?.message || 'Error al cargar productos'
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Error al cargar productos'
     } finally {
       loading.value = false
     }
@@ -36,8 +36,8 @@ export const useProductsStore = defineStore('products', () => {
     error.value = null
     try {
       products.value = await fetchProducts()
-    } catch (e: any) {
-      error.value = e?.message || 'Error al cargar productos'
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Error al cargar productos'
     } finally {
       loading.value = false
     }
@@ -48,8 +48,8 @@ export const useProductsStore = defineStore('products', () => {
     error.value = null
     try {
       current.value = await fetchProduct(id)
-    } catch (e: any) {
-      error.value = e?.message || 'Error al cargar producto'
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Error al cargar producto'
     } finally {
       loading.value = false
     }
@@ -62,8 +62,9 @@ export const useProductsStore = defineStore('products', () => {
       const created = await createProduct(data)
       products.value.unshift(created as ProductItem)
       return created
-    } catch (e: any) {
-      error.value = e?.message || 'Error al crear producto'
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Error al crear producto'
+      error.value = message
       throw e
     } finally {
       loading.value = false
@@ -79,8 +80,9 @@ export const useProductsStore = defineStore('products', () => {
       if (idx !== -1) products.value[idx] = updated as ProductItem
       if (current.value?.id === id) current.value = updated as ProductItem
       return updated
-    } catch (e: any) {
-      error.value = e?.message || 'Error al actualizar producto'
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Error al actualizar producto'
+      error.value = message
       throw e
     } finally {
       loading.value = false
@@ -93,8 +95,9 @@ export const useProductsStore = defineStore('products', () => {
     try {
       await deleteProduct(id)
       products.value = products.value.filter(p => p.id !== id)
-    } catch (e: any) {
-      error.value = e?.message || 'Error al eliminar producto'
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Error al eliminar producto'
+      error.value = message
       throw e
     } finally {
       loading.value = false

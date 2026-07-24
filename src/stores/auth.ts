@@ -17,8 +17,9 @@ export const useAuthStore = defineStore('auth', () => {
       const t = await getToken()
       token.value = t
       if (t) localStorage.setItem('directus_token', t)
-    } catch (e: any) {
-      error.value = e?.message || 'Error al iniciar sesión'
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Error al iniciar sesión'
+      error.value = message
       throw e
     } finally {
       loading.value = false

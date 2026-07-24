@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+defineOptions({ name: 'CatalogoPage' })
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import Navbar from '@/component/navbar.vue'
@@ -64,6 +65,8 @@ onMounted(async () => {
     // fallback a mock
   }
   loadingCatalog.value = false
+  await nextTick()
+  observeCards()
 })
 
 type FilterEntry = { brand: string; category: string }
@@ -99,7 +102,7 @@ function decodeFilters(raw: string): FilterEntry[] {
     .split(',')
     .filter(Boolean)
     .map(pair => {
-      const [brand, category] = pair.split('|')
+      const [brand = '', category = ''] = pair.split('|')
       return { brand, category }
     })
     .filter(f => f.brand && f.category)
@@ -124,7 +127,13 @@ watch(selectedFilters, syncQueryToUrl, { deep: true })
 
 onMounted(() => {
   if (route.query.q) searchQuery.value = route.query.q as string
-  if (route.query.filtros) selectedFilters.value = decodeFilters(route.query.filtros as string)
+  if (route.query.filtros) {
+    selectedFilters.value = decodeFilters(route.query.filtros as string)
+  } else if (route.query.marca) {
+    const brand = route.query.marca as string
+    const cats = brandCategories.value[brand] || []
+    selectedFilters.value = cats.map(category => ({ brand, category }))
+  }
 })
 
 // --- Filtros ---
@@ -164,7 +173,7 @@ function dynamicCount(brand: string, category: string) {
 }
 
 const filteredProducts = computed(() => {
-  let result = products.value.filter(p => {
+  const result = products.value.filter(p => {
     if (searchQuery.value && !p.name.toLowerCase().includes(searchQuery.value.toLowerCase())) return false
     if (selectedFilters.value.length === 0) return true
     return selectedFilters.value.some(f => f.brand === p.brand && f.category === p.category)
@@ -182,6 +191,33 @@ function clearAll() {
   searchQuery.value = ''
 }
 
+// --- Animación de entrada al hacer scroll ---
+const observedCards = new WeakSet<Element>()
+let cardObserver: IntersectionObserver | null = null
+
+function observeCards() {
+  if (!cardObserver) {
+    cardObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in-view')
+          cardObserver!.unobserve(entry.target)
+        }
+      })
+    }, { threshold: 0.15 })
+  }
+  document.querySelectorAll('.product-card').forEach((el) => {
+    if (!observedCards.has(el)) {
+      observedCards.add(el)
+      cardObserver!.observe(el)
+    }
+  })
+}
+
+watch(filteredProducts, () => {
+  nextTick(() => observeCards())
+})
+
 // --- Cerrar paneles flotantes al clickear afuera ---
 
 function onClickOutside(e: MouseEvent) {
@@ -195,7 +231,10 @@ function onClickOutside(e: MouseEvent) {
 }
 
 onMounted(() => document.addEventListener('mousedown', onClickOutside))
-onUnmounted(() => document.removeEventListener('mousedown', onClickOutside))
+onUnmounted(() => {
+  document.removeEventListener('mousedown', onClickOutside)
+  cardObserver?.disconnect()
+})
 
 function formatPrice(n: number) {
   return '$ ' + Math.round(n).toLocaleString('es-AR')
@@ -224,13 +263,15 @@ function selectSize(e: Event, product: Product, size: string) {
 }
 
 function addToCart(product: Product, size: string) {
-  cartStore.addToCart({
-    id: product.id,
-    name: product.name,
-    price: product.discount ? product.price - (product.price * product.discount) / 100 : product.price,
-    image: product.image || FALLBACK_IMAGE,
+  cartStore.addToCart(
+    {
+      id: product.id,
+      name: product.name,
+      price: product.discount ? product.price - (product.price * product.discount) / 100 : product.price,
+      image: product.image || FALLBACK_IMAGE,
+    },
     size,
-  })
+  )
   toast.add({
     severity: 'success',
     summary: 'Agregado',
@@ -384,6 +425,7 @@ useHead({
             v-for="(product, index) in filteredProducts"
             :key="product.id"
             class="product-card group relative bg-white/70 dark:bg-[#2a1a20]/50 backdrop-blur-sm border border-rose-200/30 dark:border-rose-800/20 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg dark:hover:shadow-rose-900/10 transition-all duration-500 cursor-pointer"
+            :style="{ transitionDelay: (index % 6) * 0.06 + 's' }"
             @click="goToProduct(product.id)"
           >
             <div class="aspect-[3/4] overflow-hidden relative">
@@ -469,25 +511,13 @@ useHead({
 <style scoped>
 .product-card {
   opacity: 0;
-  animation: cardFadeIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform: translateY(20px);
+  transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1), transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.product-card:nth-child(1) { animation-delay: 0.02s; }
-.product-card:nth-child(2) { animation-delay: 0.06s; }
-.product-card:nth-child(3) { animation-delay: 0.10s; }
-.product-card:nth-child(4) { animation-delay: 0.14s; }
-.product-card:nth-child(5) { animation-delay: 0.18s; }
-.product-card:nth-child(6) { animation-delay: 0.22s; }
-.product-card:nth-child(7) { animation-delay: 0.26s; }
-.product-card:nth-child(8) { animation-delay: 0.30s; }
-.product-card:nth-child(9) { animation-delay: 0.34s; }
-.product-card:nth-child(10) { animation-delay: 0.38s; }
-.product-card:nth-child(11) { animation-delay: 0.42s; }
-.product-card:nth-child(12) { animation-delay: 0.46s; }
-
-@keyframes cardFadeIn {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+.product-card.in-view {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .accordion-body {
@@ -523,5 +553,13 @@ useHead({
 .size-popover-leave-to {
   opacity: 0;
   transform: translateY(-6px) scale(0.95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-card {
+    transition: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 </style>

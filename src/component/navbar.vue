@@ -1,14 +1,15 @@
 <script setup lang="ts">
+defineOptions({ name: 'AppNavbar' })
 import Button from 'primevue/button'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart'
-import { ref, inject } from 'vue'
+import { useDarkMode } from '@/composables/useDarkMode'
+import { ref } from 'vue'
 
 const router = useRouter()
 const cartStore = useCartStore()
 const cartOpen = ref(false)
-
-const isDark = ref(localStorage.getItem('dark-mode') === 'true')
+const { isDark, toggleDark } = useDarkMode()
 
 function scrollToOfertas() {
   router.push('/')
@@ -16,32 +17,16 @@ function scrollToOfertas() {
     document.getElementById('ofertas')?.scrollIntoView({ behavior: 'smooth' })
   }, 100)
 }
-
-function toggleDark() {
-  isDark.value = !isDark.value
-  localStorage.setItem('dark-mode', String(isDark.value))
-  if (isDark.value) {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
-}
 </script>
 
 <template>
   <nav class="fixed top-0 left-0 w-full z-50 bg-white/20 dark:bg-[#1a1115]/80 backdrop-blur-sm border-b border-black/5 dark:border-white/5">
     <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-    
+
       <div class="flex items-center gap-1">
         <router-link to="/">
           <Button label="Inicio" text style="color: inherit; text-decoration: none;" class="hover:text-rose-500" />
         </router-link>
-        <router-link to="/catalogo">
-          <Button label="Catálogo" text style="color: inherit; text-decoration: none;" class="hover:text-rose-500" />
-        </router-link>
-       <!--  <router-link to="/about">
-          <Button label="Nosotros" text style="color: inherit; text-decoration: none;" class="hover:text-rose-500" />
-        </router-link> -->
         <Button label="Ofertas" text style="color: inherit; text-decoration: none;" class="hover:text-rose-500" @click="scrollToOfertas" />
 
         <button class="ml-2 p-2 rounded-lg text-gray-500 hover:text-[#1f151b] hover:bg-rose-50/50 dark:hover:bg-rose-900/20 transition-colors" @click="toggleDark" :title="isDark ? 'Modo claro' : 'Modo oscuro'">

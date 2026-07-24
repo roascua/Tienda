@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineOptions({ name: 'ContactoPage' })
 import { ref } from 'vue'
 import { useHead } from '@unhead/vue'
 import Navbar from '@/component/navbar.vue'

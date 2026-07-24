@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineOptions({ name: 'HomePage' })
 import { useHead } from '@unhead/vue'
 import Navbar from '@/component/navbar.vue'
 import HeroSection from '@/component/HeroSection.vue'
